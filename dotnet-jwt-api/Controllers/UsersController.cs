@@ -6,7 +6,7 @@ using WebApi.Services;
 
 namespace WebApi.Controllers
 {
-    //[Authorize]
+    [AuthorizeJwt]
     [ApiController]
     [Route("[controller]")]
     public class UsersController : ControllerBase
@@ -17,10 +17,8 @@ namespace WebApi.Controllers
         {
             _userService = userService;
         }
+               
 
-       
-
-        [AuthorizeJwt]
         [HttpGet]
         public IActionResult GetAll()
         {

@@ -1,0 +1,28 @@
+deploy dotnet core in IIS
+-------------------------
+
+0. Install the windows hosting bundle in IIS server
+   https://dotnet.microsoft.com/en-us/download/dotnet/5.0
+   dotnet-hosting-5.0.14-win.exe
+
+1. Create a new application pool in IIS
+   Name: Api
+   .NET CLR version: No Managed Code
+   Rest as default
+
+2. Create new application in IIS
+   Right click in Default Web Site
+   Alias: Api
+   Application pool: Api
+   Physical path: C:\inetpub\www\Api
+   Check authentication
+
+3. Publish from Visual Studio:
+   Publish method: File System
+   Target location: bin\Release\net5.0\publish\
+   Configuration: Release
+   Target Framework: net5.0
+   Deployment Mode: Self-contained
+   Target Runtime: win-x64
+   Do not make a single file deployment, not supported by IIS
+   Copy bin\Release\net5.0\publish\win-x64\* to C:\inetpub\www\Api

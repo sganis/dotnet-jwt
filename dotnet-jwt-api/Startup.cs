@@ -21,14 +21,11 @@ namespace WebApi
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddCors();
-            //services.AddAuthentication(IISDefaults.AuthenticationScheme);
             services.AddControllers();
+            
             //services.AddSwaggerGen(c => {
             //    c.SwaggerDoc("v1", new OpenApiInfo { Title = "core_api", Version = "v1" });
             //});
-
-            // configure strongly typed settings object
-            services.Configure<AppSettings>(Configuration.GetSection("AppSettings"));
 
             // configure DI for application services
             services.AddScoped<IUserService, UserService>();

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System;
@@ -7,7 +8,6 @@ using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using WebApi.Entities;
-using WebApi.Helpers;
 using WebApi.Models;
 
 namespace WebApi.Services
@@ -27,11 +27,11 @@ namespace WebApi.Services
             new User { Id = 1, FirstName = "Test", LastName = "User", Username = "test", Password = "test" }
         };
 
-        private readonly AppSettings _appSettings;
+        private readonly IConfiguration _config;
 
-        public UserService(IOptions<AppSettings> appSettings)
+        public UserService(IConfiguration config)
         {
-            _appSettings = appSettings.Value;
+            _config = config;
         }
 
         public AuthenticateResponse Authenticate(User user)
@@ -62,7 +62,7 @@ namespace WebApi.Services
         {
             // generate token that is valid for 7 days
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_appSettings.Secret);
+            var key = Encoding.ASCII.GetBytes(_config["AppSettings:Secret"]);
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new[] { new Claim("id", user.Username) }),
