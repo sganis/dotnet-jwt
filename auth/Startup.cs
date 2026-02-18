@@ -1,4 +1,4 @@
-// iisjwt/Startup.cs
+// auth/Startup.cs
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;

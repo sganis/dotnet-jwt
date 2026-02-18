@@ -1,4 +1,4 @@
-// iisjwt/Program.cs
+// auth/Program.cs
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
 

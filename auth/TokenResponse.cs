@@ -1,4 +1,4 @@
-// iisjwt/TokenResponse.cs
+// auth/TokenResponse.cs
 using System.Text.Json.Serialization;
 
 namespace WebApi

@@ -1,4 +1,4 @@
-# Orion Auth — SEECloud-IIS → Proxy-Chat / Proxy-Embed → LLM
+# Orion Auth — SEECloud-IIS → Chat / Embed → LLM
 
 Windows-authenticated JWT flow with group-based access control.
 
@@ -12,7 +12,7 @@ Windows-authenticated JWT flow with group-based access control.
 2. [Architecture](#2-architecture)
 3. [End-to-End Flow](#3-end-to-end-flow)
 4. [SEECloud-IIS — Token Issuer](#4-seecloud-iis--token-issuer)
-5. [Proxy-Chat — Enforcer](#5-chat-proxy--enforcer)
+5. [Chat — Enforcer](#5-chat-proxy--enforcer)
 6. [Token Lifetime](#6-token-lifetime)
 7. [Security Boundaries](#7-security-boundaries)
 
@@ -40,7 +40,7 @@ Orion Desktop (Windows)
     │       ◄─────────────── JWT ───────────• Validates user + AD groups
     │                                       • Issues signed JWT (RS256)
     │
-    ├─ 2. POST /v1/chat/completions ──► Proxy-Chat (FastAPI, OpenShift)
+    ├─ 2. POST /v1/chat/completions ──► Chat (FastAPI, OpenShift)
     │    Authorization: Bearer <jwt>        │  • Validate JWT (RS256, JWKS)
     │                                       │  • Check AD group → access
     │    ◄──────────── response ────────────│  • Pick tier from group
@@ -53,7 +53,7 @@ Orion Desktop (Windows)
     │                                       └──► LLM Backend (private, no auth)
     │                                            x-orion-user / x-orion-groups
     │
-    └─ 3. POST /v1/embeddings ────────► Proxy-Embed (FastAPI, OpenShift)
+    └─ 3. POST /v1/embeddings ────────► Embed (FastAPI, OpenShift)
          Authorization: Bearer <jwt>        │  • Same JWT/auth/rate-limit stack
                                             │  • Higher RPM defaults (60/120/600)
          ◄──────────── response ────────────│  • Check rpm + concurrency
@@ -72,8 +72,8 @@ Orion Desktop (Windows)
 |---|---|---|
 | **Orion Desktop** | Windows | Acquires JWT via Negotiate; sends Bearer token |
 | **SEECloud-IIS** | ASP.NET Core 9 on IIS | Windows Auth → AD group check → JWT issuance |
-| **Proxy-Chat** | FastAPI on OpenShift | JWT validation, access control, rate limiting, chat LLM forwarding |
-| **Proxy-Embed** | FastAPI on OpenShift | Same stack as Proxy-Chat; routes to embedding backend |
+| **Chat** | FastAPI on OpenShift | JWT validation, access control, rate limiting, chat LLM forwarding |
+| **Embed** | FastAPI on OpenShift | Same stack as Chat; routes to embedding backend |
 | **LLM Backend** | Private service | Chat inference only — no auth |
 | **Embed Backend** | Private service | Embedding inference only — no auth |
 
@@ -111,7 +111,7 @@ Orion Desktop
   POST https://chat-proxy.openshift.company.local/v1/chat
   Authorization: Bearer <jwt>
 
-Proxy-Chat
+Chat
   → Validate JWT signature, iss, aud, exp
   → Check user is in an ACCESS_GROUP
   → Determine rate-limit tier from group membership
@@ -182,7 +182,7 @@ foreach (var g in groups)
 
 ---
 
-## 5. Proxy-Chat — Enforcer
+## 5. Chat — Enforcer
 
 ### A. Validate JWT
 
@@ -239,6 +239,6 @@ x-orion-groups: dep1,max_group
 |---|---|
 | **Active Directory** | Single source of truth for users and group membership |
 | **SEECloud-IIS** | Windows authentication + JWT issuance (RS256) |
-| **Proxy-Chat** | JWT validation, access enforcement, rate limiting |
+| **Chat** | JWT validation, access enforcement, rate limiting |
 | **LLM Backend** | Compute only — no auth, no public route |
 | **OpenShift NetworkPolicy** | Prevents direct access to LLM or Redis from outside |

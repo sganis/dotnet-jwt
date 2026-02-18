@@ -1,4 +1,4 @@
-# proxychat/config.py
+# chat/config.py
 from pydantic_settings import BaseSettings
 
 

@@ -1,4 +1,4 @@
-# Rate Limiting — Proxy-Chat (Redis, OpenShift)
+# Rate Limiting — Chat (Redis, OpenShift)
 
 Cluster-wide rate limiting enforced by a shared Redis instance across all proxy pods.
 

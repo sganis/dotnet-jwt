@@ -1,4 +1,4 @@
-# OpenShift Deployment — Proxy-Chat + Redis
+# OpenShift Deployment — Chat + Redis
 
 > Related: [auth.md](auth.md) · [rate-limit.md](rate-limit.md)
 
@@ -6,7 +6,7 @@
 
 ## Table of Contents
 
-1. [Proxy-Chat Environment Variables](#1-chat-proxy-environment-variables)
+1. [Chat Environment Variables](#1-chat-proxy-environment-variables)
 2. [Redis](#2-redis)
 3. [NetworkPolicy](#3-networkpolicy)
 4. [Pod Scaling](#4-pod-scaling)
@@ -14,7 +14,7 @@
 
 ---
 
-## 1. Proxy-Chat Environment Variables
+## 1. Chat Environment Variables
 
 ```bash
 # JWT validation
@@ -50,19 +50,19 @@ RL_RPM_MAX=120     RL_CONC_MAX=10
 ## 3. NetworkPolicy
 
 ```
-Proxy-Chat pods  →  redis-rate-limit:6379   (rate limit store)
-Proxy-Chat pods  →  LLM-Backend             (inference)
-Proxy-Chat pods  →  SEECloud-IIS:443        (JWKS public key fetch)
+Chat pods  →  redis-rate-limit:6379   (rate limit store)
+Chat pods  →  LLM-Backend             (inference)
+Chat pods  →  SEECloud-IIS:443        (JWKS public key fetch)
 ```
 
-- No public route to LLM-Backend — only Proxy-Chat is exposed via an OpenShift Route
+- No public route to LLM-Backend — only Chat is exposed via an OpenShift Route
 - No public route to Redis
 
 ---
 
 ## 4. Pod Scaling
 
-Proxy-Chat is fully stateless. Scale replicas freely — Redis enforces all limits globally across pods.
+Chat is fully stateless. Scale replicas freely — Redis enforces all limits globally across pods.
 
 Operational guardrails:
 

@@ -1,4 +1,4 @@
-# proxychat/test_ratelimit.py
+# chat/test_ratelimit.py
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 

@@ -1,4 +1,4 @@
-# proxyembed/test_auth.py
+# chat/test_auth.py
 from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -108,6 +108,7 @@ class TestFetchJwk:
     async def test_cache_hit_skips_http_call(self):
         fake_cfg = _fake_settings()
         with patch("auth.settings", fake_cfg):
+            # Seed the whole-JWKS cache with the URL key.
             auth._jwks_cache[fake_cfg.jwt_jwks_url] = {SAMPLE_KID: SAMPLE_JWK}
             with patch("auth.httpx.AsyncClient") as mock_cls:
                 result = await _fetch_jwk(SAMPLE_KID)
@@ -149,18 +150,20 @@ class TestFetchJwk:
              patch("auth.settings", _fake_settings()):
             with pytest.raises(HTTPException):
                 await _fetch_jwk(SAMPLE_KID)
+        # Two HTTP calls: normal fetch + force-refresh.
         assert mock_cls.call_count == 2
 
     async def test_force_refresh_throttled_after_recent_refresh(self):
         """A force-refresh within the cooldown window skips the HTTP call."""
         import time as _time
-        auth._last_force_refresh = _time.monotonic()
+        auth._last_force_refresh = _time.monotonic()  # simulate very recent refresh
         other_jwks = {"keys": [{"kid": "other-key", "kty": "RSA"}]}
         cm = _mock_http_client(_mock_http_response(other_jwks))
         with patch("auth.httpx.AsyncClient", return_value=cm) as mock_cls, \
              patch("auth.settings", _fake_settings()):
             with pytest.raises(HTTPException):
                 await _fetch_jwk(SAMPLE_KID)
+        # Only one HTTP call: force-refresh was throttled.
         assert mock_cls.call_count == 1
 
 
@@ -208,6 +211,7 @@ class TestRequireAuthHappyPath:
 
 class TestRequireAuthGroupsValidation:
     async def test_invalid_groups_type_raises_401(self):
+        """Non-string, non-list groups claim is rejected."""
         payload = {"sub": "alice", "groups": 42}
         with _auth_patches(payload=payload):
             with pytest.raises(HTTPException) as exc_info:
@@ -215,6 +219,7 @@ class TestRequireAuthGroupsValidation:
         assert exc_info.value.status_code == 401
 
     async def test_groups_list_with_non_string_raises_401(self):
+        """List containing non-strings is rejected."""
         payload = {"sub": "alice", "groups": ["dep1", 99]}
         with _auth_patches(payload=payload):
             with pytest.raises(HTTPException) as exc_info:
@@ -228,6 +233,7 @@ class TestRequireAuthGroupsValidation:
 
 class TestRequireAuthAccessControl:
     async def test_empty_access_groups_allows_any_user(self):
+        """If ACCESS_GROUPS is not configured, all authenticated users pass."""
         payload = {"sub": "alice", "groups": ["random_group"]}
         cfg = _fake_settings(access_groups="")
         with _auth_patches(payload=payload, cfg=cfg):
@@ -271,7 +277,7 @@ class TestRequireAuth403:
         assert exc_info.value.detail == "Not authorized"
 
     async def test_no_groups_claim_raises_403_when_access_required(self):
-        payload = {"sub": "alice"}
+        payload = {"sub": "alice"}  # no groups key
         cfg = _fake_settings(access_groups="dep1")
         with _auth_patches(payload=payload, cfg=cfg):
             with pytest.raises(HTTPException) as exc_info:

@@ -1,4 +1,4 @@
-# iisjwt/keygen.ps1
+# auth/keygen.ps1
 # Generate a self-signed RSA certificate for JWT signing and install it into
 # Cert:\LocalMachine\My. Run on the IIS server as a local Administrator.
 #

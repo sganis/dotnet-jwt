@@ -1,4 +1,4 @@
-# proxyembed/proxy.py
+# chat/proxy.py
 import logging
 
 import httpx

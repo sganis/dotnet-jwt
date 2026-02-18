@@ -1,4 +1,4 @@
-// iisjwt/UserService.cs
+// auth/UserService.cs
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System;

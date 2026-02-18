@@ -44,13 +44,13 @@ Use the `dotnet publish` CLI (preferred over the Visual Studio publish UI).
 **Framework-dependent** — smaller output, requires Hosting Bundle on the server:
 
 ```bash
-dotnet publish iisjwt/iisjwt.csproj -c Release -f net9.0 -o bin/Release/net9.0/publish
+dotnet publish auth/auth.csproj -c Release -f net9.0 -o bin/Release/net9.0/publish
 ```
 
 **Self-contained** — bundles the runtime, no server-side install needed:
 
 ```bash
-dotnet publish iisjwt/iisjwt.csproj -c Release -f net9.0 -r win-x64 --self-contained true -o bin/Release/net9.0/publish
+dotnet publish auth/auth.csproj -c Release -f net9.0 -r win-x64 --self-contained true -o bin/Release/net9.0/publish
 ```
 
 > **Note:** Do NOT use `--single-file` — IIS does not support single-file deployments.
@@ -68,13 +68,13 @@ The publish step generates `web.config` automatically. Confirm it is present in 
 Framework-dependent:
 
 ```xml
-<aspNetCore processPath="dotnet" arguments=".\iisjwt.dll" stdoutLogEnabled="false" ... />
+<aspNetCore processPath="dotnet" arguments=".\auth.dll" stdoutLogEnabled="false" ... />
 ```
 
 Self-contained (no `dotnet` prefix):
 
 ```xml
-<aspNetCore processPath=".\iisjwt.exe" stdoutLogEnabled="false" ... />
+<aspNetCore processPath=".\auth.exe" stdoutLogEnabled="false" ... />
 ```
 
 ## 6. Windows Authentication (dotnet-jwt-login only)

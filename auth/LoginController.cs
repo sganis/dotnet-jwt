@@ -1,4 +1,4 @@
-// iisjwt/LoginController.cs
+// auth/LoginController.cs
 using System;
 using System.Collections.Generic;
 using System.DirectoryServices.AccountManagement;

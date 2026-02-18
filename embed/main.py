@@ -1,4 +1,4 @@
-# proxyembed/main.py
+# embed/main.py
 import logging
 import uuid
 from contextlib import asynccontextmanager

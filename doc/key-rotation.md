@@ -6,7 +6,7 @@ RS256 signing using certificates in the Windows Certificate Store. No UI — eve
 
 ## How it works
 
-`iisjwt` signs JWTs with an RSA private key stored in `Cert:\LocalMachine\My`. The public key is published at `GET /desktop/jwks` so `proxychat` can verify signatures without sharing any secret.
+`auth` signs JWTs with an RSA private key stored in `Cert:\LocalMachine\My`. The public key is published at `GET /desktop/jwks` so `chat` can verify signatures without sharing any secret.
 
 Each certificate has a **kid** (key ID) — a short label like `2026-Q1`. The kid appears in the JWT header and in the JWKS response, so the proxy always knows which public key to use.
 
@@ -72,7 +72,7 @@ Copy the printed thumbprint.
 ]
 ```
 
-Restart the app pool. Chat-proxy will now accept tokens signed by either key.
+Restart the app pool. Chat will now accept tokens signed by either key.
 
 ### Step 3 — Switch signing to new cert
 
@@ -104,5 +104,5 @@ Optionally delete the old cert from `certlm.msc`.
 ## Notes
 
 - Never log the raw JWT or `Authorization` header
-- Chat-proxy refreshes JWKS immediately if it sees an unknown kid, before rejecting 401
+- Chat refreshes JWKS immediately if it sees an unknown kid, before rejecting 401
 - Rotate quarterly (or monthly for tighter security)

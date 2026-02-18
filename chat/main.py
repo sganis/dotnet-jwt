@@ -1,4 +1,4 @@
-# proxychat/main.py
+# chat/main.py
 import logging
 import uuid
 from contextlib import asynccontextmanager

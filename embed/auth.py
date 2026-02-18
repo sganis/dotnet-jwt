@@ -1,4 +1,4 @@
-# proxychat/auth.py
+# embed/auth.py
 import logging
 import time
 from typing import Any

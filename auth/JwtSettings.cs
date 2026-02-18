@@ -1,4 +1,4 @@
-// iisjwt/JwtSettings.cs
+// auth/JwtSettings.cs
 using System.Collections.Generic;
 
 namespace WebApi

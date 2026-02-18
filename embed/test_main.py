@@ -1,4 +1,4 @@
-# proxyembed/test_main.py
+# embed/test_main.py
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 

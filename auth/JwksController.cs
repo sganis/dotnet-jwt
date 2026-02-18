@@ -1,4 +1,4 @@
-// iisjwt/JwksController.cs
+// auth/JwksController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

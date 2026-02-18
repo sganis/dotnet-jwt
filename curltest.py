@@ -17,8 +17,8 @@ import sys
 
 # ── Configure endpoints ──────────────────────────────────────────────────────
 IIS_URL        = "https://seecloud-iis.company.local"
-PROXYCHAT_URL  = "http://proxy-chat.openshift.company.local"
-PROXYEMBED_URL = "http://proxy-embed.openshift.company.local"
+CHAT_URL  = "http://proxy-chat.openshift.company.local"
+EMBED_URL = "http://proxy-embed.openshift.company.local"
 # ────────────────────────────────────────────────────────────────────────────
 
 
@@ -102,37 +102,37 @@ if jti := claims.get("jti"):
     _ok("jti", jti)
 
 
-# ── 3. Proxy-Chat: GET /v1/models ─────────────────────────────────────────────
-_sep(f"3 · Proxy-Chat  GET /v1/models  ({PROXYCHAT_URL})")
+# ── 3. Chat: GET /v1/models ───────────────────────────────────────────────────
+_sep(f"3 · Chat  GET /v1/models  ({CHAT_URL})")
 
 body, status = curl(
     "-H", f"Authorization: Bearer {token}",
-    f"{PROXYCHAT_URL}/v1/models",
+    f"{CHAT_URL}/v1/models",
 )
-_assert_http(status, "200", "Proxy-Chat /v1/models")
+_assert_http(status, "200", "Chat /v1/models")
 
 try:
     models = json.loads(body)
 except json.JSONDecodeError:
-    _fail(f"Expected JSON from Proxy-Chat, got:\n{body}")
+    _fail(f"Expected JSON from Chat, got:\n{body}")
 
 _ok("HTTP",     status)
 _ok("response", json.dumps(models))
 
 
-# ── 4. Proxy-Embed: GET /v1/models ────────────────────────────────────────────
-_sep(f"4 · Proxy-Embed  GET /v1/models  ({PROXYEMBED_URL})")
+# ── 4. Embed: GET /v1/models ──────────────────────────────────────────────────
+_sep(f"4 · Embed  GET /v1/models  ({EMBED_URL})")
 
 body, status = curl(
     "-H", f"Authorization: Bearer {token}",
-    f"{PROXYEMBED_URL}/v1/models",
+    f"{EMBED_URL}/v1/models",
 )
-_assert_http(status, "200", "Proxy-Embed /v1/models")
+_assert_http(status, "200", "Embed /v1/models")
 
 try:
     models = json.loads(body)
 except json.JSONDecodeError:
-    _fail(f"Expected JSON from Proxy-Embed, got:\n{body}")
+    _fail(f"Expected JSON from Embed, got:\n{body}")
 
 _ok("HTTP",     status)
 _ok("response", json.dumps(models))

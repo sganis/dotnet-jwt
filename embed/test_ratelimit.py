@@ -1,4 +1,4 @@
-# proxyembed/test_ratelimit.py
+# embed/test_ratelimit.py
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 

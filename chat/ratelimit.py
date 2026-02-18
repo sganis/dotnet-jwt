@@ -1,4 +1,4 @@
-# proxychat/ratelimit.py
+# chat/ratelimit.py
 import logging
 import time
 from dataclasses import dataclass
