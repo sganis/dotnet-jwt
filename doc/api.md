@@ -1,4 +1,4 @@
-# Chat proxy
+# Proxy-Chat
 
 ┌──────────────────────┬────────┬─────────────────────────────┐
 │       Endpoint       │ Method │       Used for              │
