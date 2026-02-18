@@ -89,6 +89,9 @@ dist
 # https://nextjs.org/blog/next-9-1#public-directory-support
 # public
 
+CLAUDE.md 
+.claude
+
 # vuepress build output
 .vuepress/dist
 
@@ -109,3 +112,12 @@ bin/
 .config/
 *.user
 PublishProfiles/
+
+# Archive — kept on disk, not tracked
+archive/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/

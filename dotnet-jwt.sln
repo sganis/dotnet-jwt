@@ -3,9 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.32126.315
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dotnet-jwt-login", "dotnet-jwt-login\dotnet-jwt-login.csproj", "{A374BD7A-EC6B-4C95-923F-7DDE0C25C1E3}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dotnet-jwt-api", "dotnet-jwt-api\dotnet-jwt-api.csproj", "{BB278479-CAD9-478C-B8B7-CB6E901EE9CF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "iisjwt", "iisjwt\iisjwt.csproj", "{A374BD7A-EC6B-4C95-923F-7DDE0C25C1E3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,10 +15,6 @@ Global
 		{A374BD7A-EC6B-4C95-923F-7DDE0C25C1E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A374BD7A-EC6B-4C95-923F-7DDE0C25C1E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A374BD7A-EC6B-4C95-923F-7DDE0C25C1E3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{BB278479-CAD9-478C-B8B7-CB6E901EE9CF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{BB278479-CAD9-478C-B8B7-CB6E901EE9CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{BB278479-CAD9-478C-B8B7-CB6E901EE9CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{BB278479-CAD9-478C-B8B7-CB6E901EE9CF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
