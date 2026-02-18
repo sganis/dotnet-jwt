@@ -1,4 +1,4 @@
-# chat/Dockerfile
+# proxy/Dockerfile
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -19,7 +19,7 @@ EXPOSE 8080
 
 # Env vars expected at runtime (set via OpenShift Deployment/ConfigMap/Secret):
 #   JWT_ISSUER, JWT_AUDIENCE, JWT_JWKS_URL
-#   LLM_BACKEND_URL
+#   LLM_CHAT_BACKEND_URL, LLM_EMBED_BACKEND_URL
 #   ACCESS_GROUPS, TIER_PRO_GROUPS, TIER_MAX_GROUPS, DEFAULT_TIER
 #   REDIS_URL, RL_ENABLED
 #   RL_RPM_BASIC, RL_RPM_PRO, RL_RPM_MAX

@@ -1,10 +1,11 @@
-# embed/proxy.py
+# proxy/proxy.py
 import logging
 
 import httpx
 from fastapi import HTTPException, Request
 from fastapi.responses import Response
 
+import router
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -14,18 +15,24 @@ _STRIP_RESPONSE_HEADERS = {"transfer-encoding", "content-encoding", "content-len
 
 
 async def forward(request: Request, user: dict) -> Response:
+    path = str(request.url.path)
+    is_embed = router.is_embed_path(path)
+
+    # Select per-route limits.
+    max_body = settings.embed_max_body_bytes if is_embed else settings.chat_max_body_bytes
+    timeout = settings.embed_proxy_timeout if is_embed else settings.chat_proxy_timeout
+
     # Enforce body size limit before reading into memory.
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > settings.max_body_bytes:
+    if content_length and int(content_length) > max_body:
         raise HTTPException(status_code=413, detail="Request body too large")
 
     body = await request.body()
-    if len(body) > settings.max_body_bytes:
+    if len(body) > max_body:
         raise HTTPException(status_code=413, detail="Request body too large")
 
-    path = str(request.url.path)
     query = request.url.query
-    upstream = settings.llm_backend_url.rstrip("/") + path
+    upstream = router.upstream_url(path, settings)
     if query:
         upstream += f"?{query}"
 
@@ -38,7 +45,7 @@ async def forward(request: Request, user: dict) -> Response:
     # Semicolon-separated; commas are valid in AD group names.
     headers["x-orion-groups"] = ";".join(user["groups"])
 
-    async with httpx.AsyncClient(timeout=settings.proxy_timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         upstream_resp = await client.request(
             method=request.method,
             url=upstream,

@@ -1,4 +1,4 @@
-# chat/test_main.py
+# proxy/test_main.py
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -23,9 +23,9 @@ def _ok_response():
     return Response(content=b'{"ok":true}', status_code=200, media_type="application/json")
 
 
-def _mock_rl(rpm_raises=None, conc_raises=None):
+def _mock_rl(rpm_raises=None, rpm_return=9, conc_raises=None):
     rl = MagicMock()
-    rl.check_rpm = AsyncMock(side_effect=rpm_raises)
+    rl.check_rpm = AsyncMock(side_effect=rpm_raises, return_value=rpm_return)
     rl.acquire_conc = AsyncMock(side_effect=conc_raises)
     rl.release_conc = AsyncMock()
     return rl
@@ -121,28 +121,14 @@ class TestRequestId:
 
 
 # ---------------------------------------------------------------------------
-# /v1/chat
-# ---------------------------------------------------------------------------
-
-class TestChat:
-    async def test_forwards_proxy_response(self, client):
-        with patch("proxy.forward", AsyncMock(return_value=_ok_response())):
-            resp = await client.post("/v1/chat/completions", content=b"{}")
-        assert resp.status_code == 200
-
-    async def test_requires_auth(self, anon_client):
-        resp = await anon_client.post("/v1/chat/completions")
-        assert resp.status_code == 401
-
-
-# ---------------------------------------------------------------------------
 # /v1/{path:path} catchall
 # ---------------------------------------------------------------------------
 
 class TestCatchall:
     @pytest.mark.parametrize("method,path", [
         ("GET", "/v1/models"),
-        ("POST", "/v1/completions"),
+        ("POST", "/v1/chat/completions"),
+        ("POST", "/v1/embeddings"),
         ("DELETE", "/v1/sessions/abc"),
         ("PUT", "/v1/resource/1"),
         ("PATCH", "/v1/resource/1"),
@@ -216,6 +202,27 @@ class TestForwardWithLimits:
             await _forward_with_limits(MagicMock(), FAKE_MAX_USER)
         rl.check_rpm.assert_awaited_once_with("max", "bob", 120)
         rl.acquire_conc.assert_awaited_once_with("max", "bob", 10)
+
+    # -- rate-limit response headers ----------------------------------------
+
+    async def test_rate_limit_headers_present_on_success(self):
+        rl = _mock_rl(rpm_return=7)
+        main._rl = rl
+        with patch("proxy.forward", AsyncMock(return_value=_ok_response())), \
+             patch("main.settings", _fake_settings()), \
+             patch("main.time") as mock_time:
+            mock_time.time.return_value = 0.0
+            resp = await _forward_with_limits(MagicMock(), FAKE_USER)
+        assert "ratelimit-remaining" in resp.headers
+        assert resp.headers["ratelimit-remaining"] == "7"
+        assert "ratelimit-reset" in resp.headers
+
+    async def test_rate_limit_headers_absent_when_rl_disabled(self):
+        fwd = AsyncMock(return_value=_ok_response())
+        with patch("proxy.forward", fwd), \
+             patch("main.settings", _fake_settings(rl_enabled=False)):
+            resp = await _forward_with_limits(MagicMock(), FAKE_USER)
+        assert "ratelimit-remaining" not in resp.headers
 
     # -- proxy raises --------------------------------------------------------
 

@@ -1,4 +1,4 @@
-# chat/ratelimit.py
+# proxy/ratelimit.py
 import logging
 import time
 from dataclasses import dataclass
@@ -52,22 +52,26 @@ class RateLimiter:
     def __init__(self, r: "aioredis.Redis") -> None:
         self.r = r
 
-    async def check_rpm(self, tier: str, user: str, limit: int) -> None:
-        """Increment the per-user per-minute counter; raise 429 if over limit."""
+    async def check_rpm(self, tier: str, user: str, limit: int) -> int:
+        """Increment the per-user per-minute counter; raise 429 if over limit.
+
+        Returns the number of remaining requests for this minute window.
+        EXPIRE is set unconditionally on every call to guard against missing
+        TTLs left by crashes or deploys.
+        """
         bucket = minute_bucket(time.time())
         key = f"rl:rpm:{tier}:{user}:{bucket}"
         val = await self.r.incr(key)
-        if val == 1:
-            await self.r.expire(key, 120)
+        await self.r.expire(key, 120)  # unconditional — safe to reset TTL each call
         if val > limit:
             raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        return max(0, limit - val)
 
     async def acquire_conc(self, tier: str, user: str, limit: int) -> None:
         """Increment concurrency counter; raise 429 and rollback if over limit."""
         key = f"rl:conc:{tier}:{user}"
         val = await self.r.incr(key)
-        if val == 1:
-            await self.r.expire(key, 300)
+        await self.r.expire(key, 300)  # unconditional — guard against stale counters
         if val > limit:
             await self.r.decr(key)
             raise HTTPException(status_code=429, detail="Too many concurrent requests")

@@ -1,4 +1,4 @@
-# embed/test_ratelimit.py
+# proxy/test_ratelimit.py
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,7 +17,7 @@ from ratelimit import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _cfg(rpm_basic=60, rpm_pro=120, rpm_max=600, conc_basic=2, conc_pro=5, conc_max=20):
+def _cfg(rpm_basic=10, rpm_pro=30, rpm_max=120, conc_basic=1, conc_pro=3, conc_max=10):
     return SimpleNamespace(
         rl_rpm_basic=rpm_basic,
         rl_rpm_pro=rpm_pro,
@@ -75,23 +75,23 @@ class TestPickTier:
 
 class TestLimitsForTier:
     def test_basic_limits(self):
-        assert limits_for_tier("basic", _cfg()) == Limits(rpm=60, conc=2)
+        assert limits_for_tier("basic", _cfg()) == Limits(rpm=10, conc=1)
 
     def test_pro_limits(self):
-        assert limits_for_tier("pro", _cfg()) == Limits(rpm=120, conc=5)
+        assert limits_for_tier("pro", _cfg()) == Limits(rpm=30, conc=3)
 
     def test_max_limits(self):
-        assert limits_for_tier("max", _cfg()) == Limits(rpm=600, conc=20)
+        assert limits_for_tier("max", _cfg()) == Limits(rpm=120, conc=10)
 
     def test_unknown_tier_falls_back_to_basic(self):
-        assert limits_for_tier("unknown", _cfg()) == Limits(rpm=60, conc=2)
+        assert limits_for_tier("unknown", _cfg()) == Limits(rpm=10, conc=1)
 
     def test_reads_cfg_values(self):
-        assert limits_for_tier("max", _cfg(rpm_max=1000, conc_max=50)) == Limits(rpm=1000, conc=50)
+        assert limits_for_tier("max", _cfg(rpm_max=200, conc_max=20)) == Limits(rpm=200, conc=20)
 
     def test_tier_lookup_case_insensitive(self):
-        assert limits_for_tier("MAX", _cfg()) == Limits(rpm=600, conc=20)
-        assert limits_for_tier("Pro", _cfg()) == Limits(rpm=120, conc=5)
+        assert limits_for_tier("MAX", _cfg()) == Limits(rpm=120, conc=10)
+        assert limits_for_tier("Pro", _cfg()) == Limits(rpm=30, conc=3)
 
 
 # ---------------------------------------------------------------------------
@@ -124,30 +124,31 @@ class TestMinuteBucket:
 # ---------------------------------------------------------------------------
 
 class TestCheckRpm:
-    async def test_first_request_sets_expire(self):
+    async def test_always_sets_expire_on_first_request(self):
         r = _redis(incr_return=1)
         rl = RateLimiter(r)
-        await rl.check_rpm("basic", "alice", 60)
+        await rl.check_rpm("basic", "alice", 10)
         r.expire.assert_awaited_once()
         _, args, _ = r.expire.mock_calls[0]
         assert args[1] == 120
 
-    async def test_subsequent_request_skips_expire(self):
+    async def test_always_sets_expire_on_subsequent_requests(self):
+        """Unconditional EXPIRE — called even when val > 1."""
         r = _redis(incr_return=2)
         rl = RateLimiter(r)
-        await rl.check_rpm("basic", "alice", 60)
-        r.expire.assert_not_awaited()
+        await rl.check_rpm("basic", "alice", 10)
+        r.expire.assert_awaited_once()
 
     async def test_within_limit_no_exception(self):
-        r = _redis(incr_return=60)
+        r = _redis(incr_return=10)
         rl = RateLimiter(r)
-        await rl.check_rpm("basic", "alice", 60)  # exactly at limit
+        await rl.check_rpm("basic", "alice", 10)  # exactly at limit
 
     async def test_over_limit_raises_429(self):
-        r = _redis(incr_return=61)
+        r = _redis(incr_return=11)
         rl = RateLimiter(r)
         with pytest.raises(HTTPException) as exc_info:
-            await rl.check_rpm("basic", "alice", 60)
+            await rl.check_rpm("basic", "alice", 10)
         assert exc_info.value.status_code == 429
         assert exc_info.value.detail == "Rate limit exceeded"
 
@@ -158,16 +159,34 @@ class TestCheckRpm:
             mock_time.time.return_value = 0.0
             mock_time.gmtime = __import__("time").gmtime
             mock_time.strftime = __import__("time").strftime
-            await rl.check_rpm("pro", "bob", 120)
+            await rl.check_rpm("pro", "bob", 30)
         key = r.incr.call_args[0][0]
         assert key.startswith("rl:rpm:pro:bob:")
 
     async def test_max_tier_limit_enforced(self):
-        r = _redis(incr_return=601)
+        r = _redis(incr_return=121)
         rl = RateLimiter(r)
         with pytest.raises(HTTPException) as exc_info:
-            await rl.check_rpm("max", "alice", 600)
+            await rl.check_rpm("max", "alice", 120)
         assert exc_info.value.status_code == 429
+
+    async def test_returns_remaining_count(self):
+        r = _redis(incr_return=3)
+        rl = RateLimiter(r)
+        remaining = await rl.check_rpm("basic", "alice", 10)
+        assert remaining == 7  # 10 - 3
+
+    async def test_returns_zero_remaining_at_limit(self):
+        r = _redis(incr_return=10)
+        rl = RateLimiter(r)
+        remaining = await rl.check_rpm("basic", "alice", 10)
+        assert remaining == 0
+
+    async def test_returns_one_remaining_on_first_request(self):
+        r = _redis(incr_return=1)
+        rl = RateLimiter(r)
+        remaining = await rl.check_rpm("basic", "alice", 5)
+        assert remaining == 4
 
 
 # ---------------------------------------------------------------------------
@@ -175,50 +194,51 @@ class TestCheckRpm:
 # ---------------------------------------------------------------------------
 
 class TestAcquireConc:
-    async def test_first_acquire_sets_expire(self):
+    async def test_always_sets_expire_on_first_acquire(self):
         r = _redis(incr_return=1)
         rl = RateLimiter(r)
-        await rl.acquire_conc("basic", "alice", 5)
+        await rl.acquire_conc("basic", "alice", 3)
         r.expire.assert_awaited_once()
         _, args, _ = r.expire.mock_calls[0]
         assert args[1] == 300
 
-    async def test_subsequent_acquire_skips_expire(self):
+    async def test_always_sets_expire_on_subsequent_acquire(self):
+        """Unconditional EXPIRE — called even when val > 1."""
         r = _redis(incr_return=2)
         rl = RateLimiter(r)
-        await rl.acquire_conc("basic", "alice", 5)
-        r.expire.assert_not_awaited()
+        await rl.acquire_conc("basic", "alice", 3)
+        r.expire.assert_awaited_once()
 
     async def test_within_limit_no_exception(self):
-        r = _redis(incr_return=2)
-        rl = RateLimiter(r)
-        await rl.acquire_conc("basic", "alice", 2)  # exactly at limit
-
-    async def test_over_limit_raises_429(self):
         r = _redis(incr_return=3)
         rl = RateLimiter(r)
+        await rl.acquire_conc("basic", "alice", 3)  # exactly at limit
+
+    async def test_over_limit_raises_429(self):
+        r = _redis(incr_return=4)
+        rl = RateLimiter(r)
         with pytest.raises(HTTPException) as exc_info:
-            await rl.acquire_conc("basic", "alice", 2)
+            await rl.acquire_conc("basic", "alice", 3)
         assert exc_info.value.status_code == 429
         assert exc_info.value.detail == "Too many concurrent requests"
 
     async def test_over_limit_rolls_back_decr(self):
-        r = _redis(incr_return=3)
+        r = _redis(incr_return=4)
         rl = RateLimiter(r)
         with pytest.raises(HTTPException):
-            await rl.acquire_conc("basic", "alice", 2)
+            await rl.acquire_conc("basic", "alice", 3)
         r.decr.assert_awaited_once_with("rl:conc:basic:alice")
 
     async def test_within_limit_no_rollback(self):
         r = _redis(incr_return=1)
         rl = RateLimiter(r)
-        await rl.acquire_conc("basic", "alice", 2)
+        await rl.acquire_conc("basic", "alice", 3)
         r.decr.assert_not_awaited()
 
     async def test_key_format(self):
         r = _redis(incr_return=1)
         rl = RateLimiter(r)
-        await rl.acquire_conc("pro", "carol", 5)
+        await rl.acquire_conc("pro", "carol", 3)
         r.incr.assert_awaited_once_with("rl:conc:pro:carol")
 
 

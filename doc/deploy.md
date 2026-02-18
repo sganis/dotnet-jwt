@@ -1,4 +1,4 @@
-# OpenShift Deployment — Chat + Redis
+# OpenShift Deployment — Orion Proxy + Redis
 
 > Related: [auth.md](auth.md) · [rate-limit.md](rate-limit.md)
 
@@ -6,7 +6,7 @@
 
 ## Table of Contents
 
-1. [Chat Environment Variables](#1-chat-proxy-environment-variables)
+1. [Proxy Environment Variables](#1-proxy-environment-variables)
 2. [Redis](#2-redis)
 3. [NetworkPolicy](#3-networkpolicy)
 4. [Pod Scaling](#4-pod-scaling)
@@ -14,13 +14,17 @@
 
 ---
 
-## 1. Chat Environment Variables
+## 1. Proxy Environment Variables
 
 ```bash
 # JWT validation
 JWT_ISSUER=https://seecloud-iis.company.local
-JWT_AUDIENCE=orion-chat-proxy
-JWKS_URL=https://seecloud-iis.company.local/.well-known/jwks.json
+JWT_AUDIENCE=orion-proxy
+JWT_JWKS_URL=https://seecloud-iis.company.local/desktop/jwks
+
+# LLM upstreams — path-based routing (/v1/embeddings → embed backend)
+LLM_CHAT_BACKEND_URL=http://llm-service:8000
+LLM_EMBED_BACKEND_URL=http://embed-service:8000
 
 # Access control (comma-separated AD group short names)
 ACCESS_GROUPS=dep1,dep2,team-ai
@@ -50,23 +54,25 @@ RL_RPM_MAX=120     RL_CONC_MAX=10
 ## 3. NetworkPolicy
 
 ```
-Chat pods  →  redis-rate-limit:6379   (rate limit store)
-Chat pods  →  LLM-Backend             (inference)
-Chat pods  →  SEECloud-IIS:443        (JWKS public key fetch)
+Proxy pods  →  redis-rate-limit:6379   (rate limit store)
+Proxy pods  →  LLM-Backend             (chat inference)
+Proxy pods  →  Embed-Backend           (embeddings)
+Proxy pods  →  SEECloud-IIS:443        (JWKS public key fetch)
 ```
 
-- No public route to LLM-Backend — only Chat is exposed via an OpenShift Route
+- No public route to LLM/Embed backends — only the Proxy is exposed via an OpenShift Route
 - No public route to Redis
 
 ---
 
 ## 4. Pod Scaling
 
-Chat is fully stateless. Scale replicas freely — Redis enforces all limits globally across pods.
+The proxy is fully stateless. Scale replicas freely — Redis enforces all limits globally across pods.
 
 Operational guardrails:
 
-- Set an upstream timeout (e.g., 120 s) so concurrency slots are not held open by hung LLM requests
+- Chat timeout (120 s) bounds how long concurrency slots are held for LLM requests
+- Embed timeout (30 s) bounds embed request slots
 - Redis concurrency key TTL (300 s) must exceed the maximum LLM response time
 - Never log `Authorization` headers
 
@@ -77,17 +83,24 @@ Operational guardrails:
 **Authentication**
 - [ ] Domain user gets a JWT silently (no browser, no password prompt)
 - [ ] JWT contains correct `groups` claim from AD
+- [ ] JWT `aud` claim is `orion-proxy`
 
 **Access control**
 - [ ] User in `ACCESS_GROUPS` can reach the LLM
 - [ ] User not in any `ACCESS_GROUPS` receives `403`
 
+**Routing**
+- [ ] `POST /v1/chat/completions` proxied to `LLM_CHAT_BACKEND_URL`
+- [ ] `POST /v1/embeddings` proxied to `LLM_EMBED_BACKEND_URL`
+- [ ] `GET /v1/models` proxied to `LLM_CHAT_BACKEND_URL`
+
 **Rate limiting**
 - [ ] `basic` tier: 11th request in a minute receives `429`
 - [ ] `basic` tier: 2nd concurrent request receives `429`
+- [ ] Successful responses include `ratelimit-remaining` and `ratelimit-reset` headers
 - [ ] Limits hold across multiple proxy pods (Redis-backed)
 - [ ] Redis restart resets counters — limits resume on next request
 
 **Isolation**
-- [ ] LLM backend is unreachable directly (NetworkPolicy enforced)
+- [ ] LLM/embed backends are unreachable directly (NetworkPolicy enforced)
 - [ ] `Authorization` header is never forwarded to LLM or written to logs

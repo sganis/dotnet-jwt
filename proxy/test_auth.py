@@ -1,4 +1,4 @@
-# embed/test_auth.py
+# proxy/test_auth.py
 from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -32,7 +32,7 @@ def _fake_settings(access_groups: str = "dep1,dep2", **kwargs):
     access_set = {x.strip() for x in access_groups.split(",") if x.strip()} if access_groups else set()
     return SimpleNamespace(
         jwt_issuer="https://test.local",
-        jwt_audience="test-audience",
+        jwt_audience="orion-proxy",
         jwt_jwks_url=FAKE_JWKS_URL,
         jwks_cache_ttl=300,
         access_groups_set=access_set,
@@ -79,9 +79,11 @@ def _auth_patches(payload=None, header=None, jwk_data=None, cfg=None) -> ExitSta
 @pytest.fixture(autouse=True)
 def clear_jwks_cache():
     auth._jwks_cache.clear()
+    auth._jwks_stale.clear()
     auth._last_force_refresh = 0.0
     yield
     auth._jwks_cache.clear()
+    auth._jwks_stale.clear()
     auth._last_force_refresh = 0.0
 
 
@@ -123,7 +125,7 @@ class TestFetchJwk:
                 await _fetch_jwk(SAMPLE_KID)
         assert exc_info.value.status_code == 401
 
-    async def test_http_error_propagates(self):
+    async def test_http_error_propagates_when_no_stale(self):
         cm = MagicMock()
         cm.__aenter__ = AsyncMock(side_effect=httpx.ConnectError("refused"))
         cm.__aexit__ = AsyncMock(return_value=False)
@@ -165,6 +167,49 @@ class TestFetchJwk:
 
 
 # ---------------------------------------------------------------------------
+# _load_jwks — stale JWKS fallback
+# ---------------------------------------------------------------------------
+
+class TestStaleJwksFallback:
+    async def test_http_error_falls_back_to_stale_keys(self):
+        """On HTTPError, return stale keys if available instead of raising."""
+        fake_cfg = _fake_settings()
+        auth._jwks_stale[fake_cfg.jwt_jwks_url] = {SAMPLE_KID: SAMPLE_JWK}
+
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(side_effect=httpx.ConnectError("refused"))
+        cm.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("auth.httpx.AsyncClient", return_value=cm), \
+             patch("auth.settings", fake_cfg):
+            result = await auth._load_jwks()
+
+        assert result == {SAMPLE_KID: SAMPLE_JWK}
+
+    async def test_successful_fetch_updates_stale_cache(self):
+        """A successful JWKS fetch populates the stale cache."""
+        fake_cfg = _fake_settings()
+        cm = _mock_http_client(_mock_http_response(SAMPLE_JWKS))
+
+        with patch("auth.httpx.AsyncClient", return_value=cm), \
+             patch("auth.settings", fake_cfg):
+            await auth._load_jwks()
+
+        assert auth._jwks_stale.get(fake_cfg.jwt_jwks_url) == {SAMPLE_KID: SAMPLE_JWK}
+
+    async def test_http_error_raises_when_stale_unavailable(self):
+        """On HTTPError with no stale keys, the error propagates."""
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(side_effect=httpx.ConnectError("refused"))
+        cm.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("auth.httpx.AsyncClient", return_value=cm), \
+             patch("auth.settings", _fake_settings()):
+            with pytest.raises(httpx.ConnectError):
+                await auth._load_jwks()
+
+
+# ---------------------------------------------------------------------------
 # require_auth — happy path
 # ---------------------------------------------------------------------------
 
@@ -187,7 +232,6 @@ class TestRequireAuthHappyPath:
         assert set(result["groups"]) == {"dep1", "max_group"}
 
     async def test_groups_claim_as_string_wrapped_to_list(self):
-        """Scalar string in groups claim is normalized to a list."""
         payload = {"sub": "alice", "groups": "dep1"}
         with _auth_patches(payload=payload):
             result = await require_auth(_creds())

@@ -1,4 +1,4 @@
-# embed/auth.py
+# proxy/auth.py
 import logging
 import time
 from typing import Any
@@ -22,6 +22,10 @@ _bearer = HTTPBearer()
 _last_force_refresh: float = 0.0
 _FORCE_REFRESH_COOLDOWN: float = 10.0  # minimum seconds between force-refreshes
 
+# Last-known-good JWKS — never expires; used as fallback when the endpoint
+# is temporarily unreachable.
+_jwks_stale: dict[str, dict[str, dict]] = {}
+
 
 async def _load_jwks(force: bool = False) -> dict[str, dict]:
     """Fetch and cache the full JWKS key set, returning a dict keyed by kid."""
@@ -31,18 +35,25 @@ async def _load_jwks(force: bool = False) -> dict[str, dict]:
     if force:
         now = time.monotonic()
         if now - _last_force_refresh < _FORCE_REFRESH_COOLDOWN:
-            # Throttled — return cached set without hitting the endpoint again.
-            return _jwks_cache.get(cache_key, {})
+            # Throttled — return cached or stale set without hitting the endpoint.
+            return _jwks_cache.get(cache_key) or _jwks_stale.get(cache_key, {})
         _last_force_refresh = now
     elif cache_key in _jwks_cache:
         return _jwks_cache[cache_key]
 
-    async with httpx.AsyncClient(verify=True, timeout=5.0) as client:
-        resp = await client.get(cache_key)
-        resp.raise_for_status()
+    try:
+        async with httpx.AsyncClient(verify=True, timeout=5.0) as client:
+            resp = await client.get(cache_key)
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        if stale := _jwks_stale.get(cache_key):
+            logger.warning("JWKS fetch failed (%s); serving stale keys", exc)
+            return stale
+        raise
 
     keys: dict[str, dict] = {k["kid"]: k for k in resp.json().get("keys", [])}
     _jwks_cache[cache_key] = keys
+    _jwks_stale[cache_key] = keys  # update stale on successful fetch
     return keys
 
 

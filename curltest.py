@@ -1,13 +1,13 @@
-# inttest.py
+# curltest.py
 """
-Integration test: Windows Negotiate → IIS JWT → Proxy-Chat / Proxy-Embed.
+Integration test: Windows Negotiate → IIS JWT → Orion Proxy.
 
-  python inttest.py
+  python curltest.py
 
 Requires:
   - curl in PATH (Windows built-in, curl.exe 7.55+)
   - Active Windows session with domain credentials (Kerberos/NTLM via SSPI)
-  - All three services reachable from this machine
+  - Both services reachable from this machine
 """
 import base64
 import datetime
@@ -16,9 +16,8 @@ import subprocess
 import sys
 
 # ── Configure endpoints ──────────────────────────────────────────────────────
-IIS_URL        = "https://seecloud-iis.company.local"
-CHAT_URL  = "http://proxy-chat.openshift.company.local"
-EMBED_URL = "http://proxy-embed.openshift.company.local"
+IIS_URL   = "https://seecloud-iis.company.local"
+PROXY_URL = "http://proxy.openshift.company.local"
 # ────────────────────────────────────────────────────────────────────────────
 
 
@@ -102,40 +101,44 @@ if jti := claims.get("jti"):
     _ok("jti", jti)
 
 
-# ── 3. Chat: GET /v1/models ───────────────────────────────────────────────────
-_sep(f"3 · Chat  GET /v1/models  ({CHAT_URL})")
+# ── 3. Proxy: GET /v1/models ──────────────────────────────────────────────────
+_sep(f"3 · Proxy  GET /v1/models  ({PROXY_URL})")
 
 body, status = curl(
     "-H", f"Authorization: Bearer {token}",
-    f"{CHAT_URL}/v1/models",
+    f"{PROXY_URL}/v1/models",
 )
-_assert_http(status, "200", "Chat /v1/models")
+_assert_http(status, "200", "Proxy /v1/models")
 
 try:
     models = json.loads(body)
 except json.JSONDecodeError:
-    _fail(f"Expected JSON from Chat, got:\n{body}")
+    _fail(f"Expected JSON from Proxy, got:\n{body}")
 
 _ok("HTTP",     status)
 _ok("response", json.dumps(models))
 
 
-# ── 4. Embed: GET /v1/models ──────────────────────────────────────────────────
-_sep(f"4 · Embed  GET /v1/models  ({EMBED_URL})")
+# ── 4. Proxy: POST /v1/embeddings ─────────────────────────────────────────────
+_sep(f"4 · Proxy  POST /v1/embeddings  ({PROXY_URL})")
 
+embed_body = json.dumps({"input": "hello world", "model": "text-embedding-ada-002"})
 body, status = curl(
+    "-X", "POST",
     "-H", f"Authorization: Bearer {token}",
-    f"{EMBED_URL}/v1/models",
+    "-H", "Content-Type: application/json",
+    "-d", embed_body,
+    f"{PROXY_URL}/v1/embeddings",
 )
-_assert_http(status, "200", "Embed /v1/models")
+_assert_http(status, "200", "Proxy /v1/embeddings")
 
 try:
-    models = json.loads(body)
+    embed_resp = json.loads(body)
 except json.JSONDecodeError:
-    _fail(f"Expected JSON from Embed, got:\n{body}")
+    _fail(f"Expected JSON from Proxy embed, got:\n{body}")
 
 _ok("HTTP",     status)
-_ok("response", json.dumps(models))
+_ok("response", json.dumps(embed_resp)[:80])
 
 
 # ── Done ──────────────────────────────────────────────────────────────────────

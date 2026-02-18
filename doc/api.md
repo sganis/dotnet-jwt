@@ -1,19 +1,29 @@
-# Chat
+# Orion Proxy — API
 
-┌──────────────────────┬────────┬─────────────────────────────┐
-│       Endpoint       │ Method │       Used for              │
-├──────────────────────┼────────┼─────────────────────────────┤
-│ /v1/chat/completions │ POST   │ All chat  + streaming (SSE) │
-├──────────────────────┼────────┼─────────────────────────────┤
-│ /v1/models           │ GET    │ Model list                  │
-└──────────────────────┴────────┴─────────────────────────────┘
+All endpoints require `Authorization: Bearer <jwt>` unless noted.
 
-# Embed
+┌──────────────────────┬────────┬─────────────────────────────────────────────┐
+│       Endpoint       │ Method │       Used for                              │
+├──────────────────────┼────────┼─────────────────────────────────────────────┤
+│ /v1/chat/completions │ POST   │ Chat completions + streaming (SSE)          │
+├──────────────────────┼────────┼─────────────────────────────────────────────┤
+│ /v1/embeddings       │ POST   │ RAG embeddings                              │
+├──────────────────────┼────────┼─────────────────────────────────────────────┤
+│ /v1/models           │ GET    │ Model list                                  │
+├──────────────────────┼────────┼─────────────────────────────────────────────┤
+│ /health              │ GET    │ Liveness probe (no auth required)           │
+└──────────────────────┴────────┴─────────────────────────────────────────────┘
 
-┌──────────────────────┬────────┬─────────────────────────────┐
-│       Endpoint       │ Method │       Used for              │
-├──────────────────────┼────────┼─────────────────────────────┤
-│ /v1/embeddings       │ POST   │ RAG embeddings              │
-├──────────────────────┼────────┼─────────────────────────────┤
-│ /v1/models           │ GET    │ Model list                  │
-└──────────────────────┴────────┴─────────────────────────────┘
+## Routing
+
+- `POST /v1/embeddings` → `LLM_EMBED_BACKEND_URL`
+- All other `/v1/*` → `LLM_CHAT_BACKEND_URL`
+
+## Rate-limit response headers
+
+Every proxied response includes:
+
+| Header | Value |
+|--------|-------|
+| `ratelimit-remaining` | Requests remaining in the current minute window |
+| `ratelimit-reset` | Seconds until the window resets |
