@@ -1,4 +1,5 @@
 # proxy/config.py
+from pydantic import PrivateAttr
 from pydantic_settings import BaseSettings
 
 
@@ -14,8 +15,8 @@ class Settings(BaseSettings):
     jwks_cache_ttl: int = 300  # seconds
 
     # LLM upstreams — routing is path-based (see router.py)
-    chat_backend_url: str = "http://llm-service:8000"   # LLM_CHAT_BACKEND_URL
-    embed_backend_url: str = "http://embed-service:8000" # LLM_EMBED_BACKEND_URL
+    chat_backend_url: str = "http://llm-service:8000"    # LLM_CHAT_BACKEND_URL
+    embed_backend_url: str = "http://embed-service:8000"  # LLM_EMBED_BACKEND_URL
 
     # Per-route timeouts (seconds)
     chat_proxy_timeout: float = 120.0   # CHAT_PROXY_TIMEOUT
@@ -49,17 +50,27 @@ class Settings(BaseSettings):
     rl_conc_pro: int = 3          # RL_CONC_PRO
     rl_conc_max: int = 10         # RL_CONC_MAX
 
+    # Pre-computed sets — parsed once at startup, not on every request.
+    _access_groups_set: set[str] = PrivateAttr(default_factory=set)
+    _tier_max_set: set[str] = PrivateAttr(default_factory=set)
+    _tier_pro_set: set[str] = PrivateAttr(default_factory=set)
+
+    def model_post_init(self, __context) -> None:
+        self._access_groups_set = _csv_set(self.access_groups)
+        self._tier_max_set = _csv_set(self.tier_max_groups)
+        self._tier_pro_set = _csv_set(self.tier_pro_groups)
+
     @property
     def access_groups_set(self) -> set[str]:
-        return _csv_set(self.access_groups)
+        return self._access_groups_set
 
     @property
     def tier_max_set(self) -> set[str]:
-        return _csv_set(self.tier_max_groups)
+        return self._tier_max_set
 
     @property
     def tier_pro_set(self) -> set[str]:
-        return _csv_set(self.tier_pro_groups)
+        return self._tier_pro_set
 
     model_config = {"env_file": ".env", "case_sensitive": False}
 

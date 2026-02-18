@@ -53,7 +53,9 @@ namespace WebApi
             services.AddAuthentication(IISDefaults.AuthenticationScheme);
             services.AddControllers();
             services.Configure<JwtSettings>(Configuration.GetSection("JwtSettings"));
-            services.AddScoped<IUserService, UserService>();
+            // Singleton: UserService only depends on IOptions (effectively singleton)
+            // and has no per-request state.
+            services.AddSingleton<IUserService, UserService>();
 
             // Per-IP rate limit on the token endpoint (20 req/min).
             services.AddRateLimiter(o =>
@@ -70,15 +72,15 @@ namespace WebApi
                 o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             });
 
-            // Health check that re-validates the signing cert on each probe.
+            // Health check: capture the thumbprint at registration time rather than
+            // re-parsing IConfiguration on every probe.
+            var thumbprint = jwt.ActiveSigningThumbprint;
             services.AddHealthChecks()
                 .AddCheck("jwt-signing-cert", () =>
                 {
-                    var cfg = Configuration.GetSection("JwtSettings").Get<JwtSettings>()
-                              ?? new JwtSettings();
                     try
                     {
-                        UserService.ValidateSigningCert(cfg.ActiveSigningThumbprint);
+                        UserService.ValidateSigningCert(thumbprint);
                         return HealthCheckResult.Healthy();
                     }
                     catch (Exception ex)

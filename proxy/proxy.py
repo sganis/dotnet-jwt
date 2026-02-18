@@ -1,7 +1,6 @@
 # proxy/proxy.py
 import logging
 
-import httpx
 from fastapi import HTTPException, Request
 from fastapi.responses import Response
 
@@ -11,7 +10,9 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 _STRIP_REQUEST_HEADERS  = {"authorization", "host", "content-length", "transfer-encoding"}
-_STRIP_RESPONSE_HEADERS = {"transfer-encoding", "content-encoding", "content-length", "connection"}
+# content-type is stripped here because it is passed explicitly as media_type= to Response(),
+# which would otherwise produce a duplicate header.
+_STRIP_RESPONSE_HEADERS = {"transfer-encoding", "content-encoding", "content-length", "connection", "content-type"}
 
 
 async def forward(request: Request, user: dict) -> Response:
@@ -20,7 +21,7 @@ async def forward(request: Request, user: dict) -> Response:
 
     # Select per-route limits.
     max_body = settings.embed_max_body_bytes if is_embed else settings.chat_max_body_bytes
-    timeout = settings.embed_proxy_timeout if is_embed else settings.chat_proxy_timeout
+    timeout  = settings.embed_proxy_timeout  if is_embed else settings.chat_proxy_timeout
 
     # Enforce body size limit before reading into memory.
     content_length = request.headers.get("content-length")
@@ -31,7 +32,7 @@ async def forward(request: Request, user: dict) -> Response:
     if len(body) > max_body:
         raise HTTPException(status_code=413, detail="Request body too large")
 
-    query = request.url.query
+    query    = request.url.query
     upstream = router.upstream_url(path, settings)
     if query:
         upstream += f"?{query}"
@@ -45,13 +46,15 @@ async def forward(request: Request, user: dict) -> Response:
     # Semicolon-separated; commas are valid in AD group names.
     headers["x-orion-groups"] = ";".join(user["groups"])
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        upstream_resp = await client.request(
-            method=request.method,
-            url=upstream,
-            headers=headers,
-            content=body,
-        )
+    # Reuse the shared client from app.state — avoids opening a new TCP connection per request.
+    client = request.app.state.http_client
+    upstream_resp = await client.request(
+        method=request.method,
+        url=upstream,
+        headers=headers,
+        content=body,
+        timeout=timeout,
+    )
 
     if upstream_resp.status_code >= 500:
         logger.error(

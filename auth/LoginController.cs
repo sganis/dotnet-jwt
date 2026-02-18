@@ -68,6 +68,7 @@ namespace WebApi
 
                     return up?.GetGroups()
                               .Select(g => g.SamAccountName)
+                              .OfType<string>()  // filter out any null SamAccountNames
                               .ToList();
                 });
 

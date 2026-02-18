@@ -1,10 +1,12 @@
 # proxy/main.py
 import logging
+import logging.config
 import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import Response
@@ -14,6 +16,10 @@ from auth import require_auth
 from config import settings
 from ratelimit import RateLimiter, limits_for_tier, pick_tier
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 _rl: RateLimiter | None = None
@@ -30,6 +36,10 @@ async def lifespan(app: FastAPI):
             "Set RL_ENABLED=false to run without rate limiting."
         )
 
+    # Shared HTTP client — connection pools are reused across all proxy requests.
+    app.state.http_client = httpx.AsyncClient()
+    logger.info("HTTP client initialised")
+
     if settings.redis_url:
         _redis = aioredis.from_url(
             settings.redis_url, encoding="utf-8", decode_responses=True
@@ -40,6 +50,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    await app.state.http_client.aclose()
     if _redis:
         await _redis.aclose()
 
