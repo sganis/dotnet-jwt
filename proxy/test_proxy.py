@@ -2,7 +2,6 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.responses import Response
@@ -28,6 +27,13 @@ def _fake_settings(**overrides):
     return SimpleNamespace(**base)
 
 
+def _mock_http_client(upstream_resp):
+    """Return a mock AsyncClient whose .request() returns upstream_resp."""
+    client = AsyncMock()
+    client.request = AsyncMock(return_value=upstream_resp)
+    return client
+
+
 def _mock_request(path: str, body: bytes = b"{}", method: str = "POST", query: str = ""):
     req = MagicMock()
     req.url.path = path
@@ -35,6 +41,10 @@ def _mock_request(path: str, body: bytes = b"{}", method: str = "POST", query: s
     req.method = method
     req.headers = {}
     req.body = AsyncMock(return_value=body)
+    # Provide a default mock client; override via req.app.state.http_client in tests
+    # that need to inspect call args or control the upstream response.
+    req.app.state.http_client = AsyncMock()
+    req.app.state.http_client.request = AsyncMock()
     return req
 
 
@@ -46,15 +56,6 @@ def _upstream_response(status: int = 200, body: bytes = b'{"ok":true}') -> Magic
     return resp
 
 
-def _mock_http_client(upstream_resp):
-    inner = AsyncMock()
-    inner.request = AsyncMock(return_value=upstream_resp)
-    cm = MagicMock()
-    cm.__aenter__ = AsyncMock(return_value=inner)
-    cm.__aexit__ = AsyncMock(return_value=False)
-    return cm, inner
-
-
 # ---------------------------------------------------------------------------
 # Routing — correct backend selected by path
 # ---------------------------------------------------------------------------
@@ -63,11 +64,11 @@ class TestRouting:
     async def test_chat_path_goes_to_chat_backend(self):
         cfg = _fake_settings()
         upstream_resp = _upstream_response()
-        cm, inner = _mock_http_client(upstream_resp)
+        inner = _mock_http_client(upstream_resp)
         req = _mock_request("/v1/chat/completions")
+        req.app.state.http_client = inner
 
-        with patch("proxy.settings", cfg), \
-             patch("proxy.httpx.AsyncClient", return_value=cm):
+        with patch("proxy.settings", cfg):
             await proxy.forward(req, FAKE_USER)
 
         called_url = inner.request.call_args[1]["url"]
@@ -76,11 +77,11 @@ class TestRouting:
     async def test_embed_path_goes_to_embed_backend(self):
         cfg = _fake_settings()
         upstream_resp = _upstream_response()
-        cm, inner = _mock_http_client(upstream_resp)
+        inner = _mock_http_client(upstream_resp)
         req = _mock_request("/v1/embeddings")
+        req.app.state.http_client = inner
 
-        with patch("proxy.settings", cfg), \
-             patch("proxy.httpx.AsyncClient", return_value=cm):
+        with patch("proxy.settings", cfg):
             await proxy.forward(req, FAKE_USER)
 
         called_url = inner.request.call_args[1]["url"]
@@ -89,11 +90,11 @@ class TestRouting:
     async def test_models_path_goes_to_chat_backend(self):
         cfg = _fake_settings()
         upstream_resp = _upstream_response()
-        cm, inner = _mock_http_client(upstream_resp)
+        inner = _mock_http_client(upstream_resp)
         req = _mock_request("/v1/models", method="GET")
+        req.app.state.http_client = inner
 
-        with patch("proxy.settings", cfg), \
-             patch("proxy.httpx.AsyncClient", return_value=cm):
+        with patch("proxy.settings", cfg):
             await proxy.forward(req, FAKE_USER)
 
         called_url = inner.request.call_args[1]["url"]
@@ -101,33 +102,33 @@ class TestRouting:
 
 
 # ---------------------------------------------------------------------------
-# Per-route timeouts
+# Per-route timeouts — timeout is now passed per-request, not to the constructor
 # ---------------------------------------------------------------------------
 
 class TestTimeout:
     async def test_chat_path_uses_chat_timeout(self):
         cfg = _fake_settings(chat_proxy_timeout=90.0, embed_proxy_timeout=15.0)
         upstream_resp = _upstream_response()
-        cm, _ = _mock_http_client(upstream_resp)
+        inner = _mock_http_client(upstream_resp)
         req = _mock_request("/v1/chat/completions")
+        req.app.state.http_client = inner
 
-        with patch("proxy.settings", cfg), \
-             patch("proxy.httpx.AsyncClient", return_value=cm) as mock_cls:
+        with patch("proxy.settings", cfg):
             await proxy.forward(req, FAKE_USER)
 
-        assert mock_cls.call_args[1]["timeout"] == 90.0
+        assert inner.request.call_args[1]["timeout"] == 90.0
 
     async def test_embed_path_uses_embed_timeout(self):
         cfg = _fake_settings(chat_proxy_timeout=90.0, embed_proxy_timeout=15.0)
         upstream_resp = _upstream_response()
-        cm, _ = _mock_http_client(upstream_resp)
+        inner = _mock_http_client(upstream_resp)
         req = _mock_request("/v1/embeddings")
+        req.app.state.http_client = inner
 
-        with patch("proxy.settings", cfg), \
-             patch("proxy.httpx.AsyncClient", return_value=cm) as mock_cls:
+        with patch("proxy.settings", cfg):
             await proxy.forward(req, FAKE_USER)
 
-        assert mock_cls.call_args[1]["timeout"] == 15.0
+        assert inner.request.call_args[1]["timeout"] == 15.0
 
 
 # ---------------------------------------------------------------------------
@@ -159,13 +160,13 @@ class TestBodySizeLimit:
         """A body that exceeds embed limit is fine for chat (uses chat limit)."""
         cfg = _fake_settings(chat_max_body_bytes=10 * 1024 * 1024, embed_max_body_bytes=50)
         upstream_resp = _upstream_response()
-        cm, _ = _mock_http_client(upstream_resp)
+        inner = _mock_http_client(upstream_resp)
         body = b"x" * 100  # over embed limit, under chat limit
         req = _mock_request("/v1/chat/completions", body=body)
         req.headers = {"content-length": str(len(body))}
+        req.app.state.http_client = inner
 
-        with patch("proxy.settings", cfg), \
-             patch("proxy.httpx.AsyncClient", return_value=cm):
+        with patch("proxy.settings", cfg):
             resp = await proxy.forward(req, FAKE_USER)
         assert resp.status_code == 200
 
@@ -178,12 +179,12 @@ class TestHeaders:
     async def test_authorization_header_stripped(self):
         cfg = _fake_settings()
         upstream_resp = _upstream_response()
-        cm, inner = _mock_http_client(upstream_resp)
+        inner = _mock_http_client(upstream_resp)
         req = _mock_request("/v1/chat/completions")
         req.headers = {"authorization": "Bearer secret", "content-type": "application/json"}
+        req.app.state.http_client = inner
 
-        with patch("proxy.settings", cfg), \
-             patch("proxy.httpx.AsyncClient", return_value=cm):
+        with patch("proxy.settings", cfg):
             await proxy.forward(req, FAKE_USER)
 
         sent_headers = inner.request.call_args[1]["headers"]
@@ -192,12 +193,12 @@ class TestHeaders:
     async def test_audit_headers_injected(self):
         cfg = _fake_settings()
         upstream_resp = _upstream_response()
-        cm, inner = _mock_http_client(upstream_resp)
+        inner = _mock_http_client(upstream_resp)
         req = _mock_request("/v1/chat/completions")
         req.headers = {}
+        req.app.state.http_client = inner
 
-        with patch("proxy.settings", cfg), \
-             patch("proxy.httpx.AsyncClient", return_value=cm):
+        with patch("proxy.settings", cfg):
             await proxy.forward(req, FAKE_USER)
 
         sent_headers = inner.request.call_args[1]["headers"]
@@ -207,11 +208,11 @@ class TestHeaders:
     async def test_query_string_appended(self):
         cfg = _fake_settings()
         upstream_resp = _upstream_response()
-        cm, inner = _mock_http_client(upstream_resp)
+        inner = _mock_http_client(upstream_resp)
         req = _mock_request("/v1/models", query="limit=5", method="GET")
+        req.app.state.http_client = inner
 
-        with patch("proxy.settings", cfg), \
-             patch("proxy.httpx.AsyncClient", return_value=cm):
+        with patch("proxy.settings", cfg):
             await proxy.forward(req, FAKE_USER)
 
         called_url = inner.request.call_args[1]["url"]
