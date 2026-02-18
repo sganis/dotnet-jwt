@@ -1,4 +1,4 @@
-# proxychat/test_main.py
+# proxyembed/test_main.py
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -37,12 +37,12 @@ def _fake_settings(**overrides):
         tier_max_set={"max_group"},
         tier_pro_set={"pro_group"},
         default_tier="basic",
-        rl_rpm_basic=10,
-        rl_rpm_pro=30,
-        rl_rpm_max=120,
-        rl_conc_basic=1,
-        rl_conc_pro=3,
-        rl_conc_max=10,
+        rl_rpm_basic=60,
+        rl_rpm_pro=120,
+        rl_rpm_max=600,
+        rl_conc_basic=2,
+        rl_conc_pro=5,
+        rl_conc_max=20,
         redis_url=None,
     )
     base.update(overrides)
@@ -109,29 +109,29 @@ class TestHealth:
 class TestRequestId:
     async def test_request_id_added_to_response(self, client):
         with patch("proxy.forward", AsyncMock(return_value=_ok_response())):
-            resp = await client.post("/v1/chat/completions", content=b"{}")
+            resp = await client.post("/v1/embeddings", content=b"{}")
         assert "x-request-id" in resp.headers
 
     async def test_existing_request_id_propagated(self, client):
         with patch("proxy.forward", AsyncMock(return_value=_ok_response())):
             resp = await client.post(
-                "/v1/chat/completions", content=b"{}", headers={"x-request-id": "my-trace-id"}
+                "/v1/embeddings", content=b"{}", headers={"x-request-id": "my-trace-id"}
             )
         assert resp.headers["x-request-id"] == "my-trace-id"
 
 
 # ---------------------------------------------------------------------------
-# /v1/chat
+# /v1/embeddings
 # ---------------------------------------------------------------------------
 
-class TestChat:
+class TestEmbeddings:
     async def test_forwards_proxy_response(self, client):
         with patch("proxy.forward", AsyncMock(return_value=_ok_response())):
-            resp = await client.post("/v1/chat/completions", content=b"{}")
+            resp = await client.post("/v1/embeddings", content=b"{}")
         assert resp.status_code == 200
 
     async def test_requires_auth(self, anon_client):
-        resp = await anon_client.post("/v1/chat/completions")
+        resp = await anon_client.post("/v1/embeddings")
         assert resp.status_code == 401
 
 
@@ -142,7 +142,7 @@ class TestChat:
 class TestCatchall:
     @pytest.mark.parametrize("method,path", [
         ("GET", "/v1/models"),
-        ("POST", "/v1/completions"),
+        ("POST", "/v1/embeddings"),
         ("DELETE", "/v1/sessions/abc"),
         ("PUT", "/v1/resource/1"),
         ("PATCH", "/v1/resource/1"),
@@ -205,17 +205,26 @@ class TestForwardWithLimits:
         with patch("proxy.forward", AsyncMock(return_value=_ok_response())), \
              patch("main.settings", _fake_settings()):
             await _forward_with_limits(MagicMock(), FAKE_USER)
-        rl.check_rpm.assert_awaited_once_with("basic", "alice", 10)
-        rl.acquire_conc.assert_awaited_once_with("basic", "alice", 1)
+        rl.check_rpm.assert_awaited_once_with("basic", "alice", 60)
+        rl.acquire_conc.assert_awaited_once_with("basic", "alice", 2)
 
     async def test_max_tier_limits_passed_for_max_user(self):
         rl = _mock_rl()
         main._rl = rl
         with patch("proxy.forward", AsyncMock(return_value=_ok_response())), \
              patch("main.settings", _fake_settings()):
+            await _forward_with_limits(MagicMock(), FAKE_USER)
+        rl.check_rpm.assert_awaited_once_with("basic", "alice", 60)
+        rl.acquire_conc.assert_awaited_once_with("basic", "alice", 2)
+
+    async def test_max_tier_limits_for_max_user(self):
+        rl = _mock_rl()
+        main._rl = rl
+        with patch("proxy.forward", AsyncMock(return_value=_ok_response())), \
+             patch("main.settings", _fake_settings()):
             await _forward_with_limits(MagicMock(), FAKE_MAX_USER)
-        rl.check_rpm.assert_awaited_once_with("max", "bob", 120)
-        rl.acquire_conc.assert_awaited_once_with("max", "bob", 10)
+        rl.check_rpm.assert_awaited_once_with("max", "bob", 600)
+        rl.acquire_conc.assert_awaited_once_with("max", "bob", 20)
 
     # -- proxy raises --------------------------------------------------------
 

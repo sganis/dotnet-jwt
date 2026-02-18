@@ -1,4 +1,4 @@
-# proxychat/main.py
+# proxyembed/main.py
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
         await _redis.aclose()
 
 
-app = FastAPI(title="Orion Chat Proxy", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Orion Embed Proxy", version="1.0.0", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -75,8 +75,8 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/v1/chat/completions")
-async def chat(request: Request, user: dict[str, Any] = Depends(require_auth)):
+@app.post("/v1/embeddings")
+async def embeddings(request: Request, user: dict[str, Any] = Depends(require_auth)):
     return await _forward_with_limits(request, user)
 
 
