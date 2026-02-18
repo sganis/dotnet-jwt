@@ -1,9 +1,8 @@
-// dotnet-jwt-login/Controllers/JwksController.cs
+// iisjwt/JwksController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using WebApi.Services;
 
-namespace WebApi.Controllers
+namespace WebApi
 {
     [ApiController]
     [Route("desktop")]
@@ -16,7 +15,7 @@ namespace WebApi.Controllers
             _userService = userService;
         }
 
-        /// <summary>Returns the RSA public key in JWK Set format for JWT signature verification.</summary>
+        /// <summary>Returns the RSA public keys in JWK Set format for JWT signature verification.</summary>
         [AllowAnonymous]
         [HttpGet("jwks")]
         public IActionResult GetJwks()
